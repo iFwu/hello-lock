@@ -19,8 +19,8 @@ public static class Localization
             ["Lock.Hint"] = ("Click or press a key to verify", "点击或按任意键进行验证"),
             ["Lock.Verify"] = ("Verify with Windows credentials", "使用 Windows 凭据验证"),
             ["Lock.HookFailed"] = (
-                "HelloLock could not install its keyboard guard and did not lock the desktop.\n\n{0}",
-                "HelloLock 无法安装键盘保护，因此未锁定桌面。\n\n{0}"),
+                "HelloLock could not install its input guard and did not lock the desktop.\n\n{0}",
+                "HelloLock 无法安装输入保护，因此未锁定桌面。\n\n{0}"),
             ["Lock.Error"] = ("Error: {0}", "错误：{0}"),
 
             ["Credential.Prompt"] = ("Verify the current Windows user", "验证当前 Windows 用户"),
@@ -48,7 +48,7 @@ public static class Localization
             ["Settings.Cancel"] = ("Cancel", "取消"),
             ["Settings.Saved"] = ("Settings saved.", "设置已保存。"),
             ["Settings.SaveFailed"] = ("Unable to save settings:\n{0}", "无法保存设置：\n{0}"),
-            ["Settings.NotInstalled"] = ("HelloLock is not installed as a screensaver. Run the installer first.", "HelloLock 尚未安装为屏幕保护程序，请先运行安装脚本。"),
+            ["Settings.NotInstalled"] = ("HelloLock is not installed. Run the installer first.", "HelloLock 尚未安装，请先运行安装脚本。"),
             ["Settings.TaskMissing"] = ("The HelloLock tray task is missing. Run the installer again.", "HelloLock 托盘任务不存在，请重新运行安装脚本。"),
             ["Settings.TaskSchedulerMissing"] = ("Windows Task Scheduler is unavailable.", "Windows 任务计划程序不可用。"),
             ["Settings.TaskSchedulerConnectFailed"] = ("Could not connect to Windows Task Scheduler.", "无法连接 Windows 任务计划程序。"),
@@ -80,10 +80,16 @@ public static class Localization
     public static void SetLanguage(AppLanguage language, bool persist = true)
     {
         bool changed = _settings.Language != language;
-        _settings.Language = language;
         if (persist)
         {
-            UserSettingsStore.Save(_settings);
+            var settings = UserSettingsStore.Load();
+            settings.Language = language;
+            UserSettingsStore.Save(settings);
+            _settings = settings;
+        }
+        else
+        {
+            _settings.Language = language;
         }
         if (changed)
         {

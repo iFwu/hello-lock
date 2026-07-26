@@ -11,7 +11,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>HelloLock</AssemblyName>
     <RootNamespace>HelloLock</RootNamespace>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Authors>niceSprite</Authors>
     <Description>Transparent application-level Windows lock with Windows Hello verification.</Description>
     <RepositoryUrl>https://github.com/iFwu/hello-lock</RepositoryUrl>

@@ -19,6 +19,8 @@ $trayUserSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $trayTaskName = "HelloLock Tray (iFwu, $trayUserSid)"
 $legacyTrayTaskName = 'HelloLock Tray'
 $managedTaskDescription = 'HelloLock tray launcher managed by iFwu/hello-lock'
+$startMenuDir = Join-Path ([Environment]::GetFolderPath(
+    [Environment+SpecialFolder]::Programs)) 'HelloLock'
 
 function Get-RegistryValueOrNull {
     param([string]$Path, [string]$Name)
@@ -50,6 +52,32 @@ function Test-PathEquals {
         [IO.Path]::GetFullPath($Left).TrimEnd('\'),
         [IO.Path]::GetFullPath($Right).TrimEnd('\'),
         [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-ShortcutInfo {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) { return $null }
+    $shell = New-Object -ComObject WScript.Shell
+    $shortcut = $shell.CreateShortcut($Path)
+    try {
+        return [pscustomobject]@{
+            TargetPath = [string]$shortcut.TargetPath
+            Arguments = ([string]$shortcut.Arguments).Trim()
+        }
+    } finally {
+        [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($shortcut)
+        [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($shell)
+    }
+}
+
+function Test-ManagedShortcut {
+    param($Definition)
+
+    $info = Get-ShortcutInfo -Path ([string]$Definition.Path)
+    return $null -ne $info -and
+        (Test-PathEquals $info.TargetPath $installedExe) -and
+        $info.Arguments -eq ([string]$Definition.Arguments).Trim()
 }
 
 function ConvertTo-SidString {
@@ -143,12 +171,33 @@ $backup = if (Test-Path -LiteralPath $backupPath) {
     $null
 }
 
+$shortcutDefinitions = if ($null -ne $state -and
+    $null -ne $state.PSObject.Properties['Shortcuts']) {
+    @($state.Shortcuts)
+} else {
+    @()
+}
+foreach ($definition in $shortcutDefinitions) {
+    if (Test-ManagedShortcut $definition) {
+        Remove-Item -LiteralPath ([string]$definition.Path) -Force
+    }
+}
+$removeStartMenuDir = $null -ne $state -and
+    $null -ne $state.PSObject.Properties['StartMenuDirectoryCreated'] -and
+    [bool]$state.StartMenuDirectoryCreated
+if ($removeStartMenuDir -and
+    (Test-Path -LiteralPath $startMenuDir) -and
+    @(Get-ChildItem -LiteralPath $startMenuDir -Force).Count -eq 0) {
+    Remove-Item -LiteralPath $startMenuDir -Force
+}
+
 foreach ($name in @('ScreenSaveActive', 'ScreenSaveTimeOut', 'ScreenSaverIsSecure', 'SCRNSAVE.EXE')) {
     $current = Get-RegistryValueOrNull -Path $desktopKey -Name $name
-    $applied = if ($null -ne $state) { [string]$state.Applied.$name } else { $null }
+    $hasLegacyScreenState = $null -ne $state -and $null -ne $state.PSObject.Properties['Applied']
+    $applied = if ($hasLegacyScreenState) { [string]$state.Applied.$name } else { $null }
     $managedFallback = $name -eq 'SCRNSAVE.EXE' -and
         (Test-PathEquals $current (Join-Path $installDir 'HelloLock.scr'))
-    if (($null -ne $state -and $current -eq $applied) -or $managedFallback) {
+    if (($hasLegacyScreenState -and $current -eq $applied) -or $managedFallback) {
         $original = if ($null -ne $backup) { $backup.$name } else { $null }
         Set-RegistryValueOrRemove -Path $desktopKey -Name $name -Value $original
     }
@@ -175,7 +224,7 @@ if ($RemoveLogs -and (Test-Path -LiteralPath $logDir)) {
     Remove-Item -LiteralPath $logDir -Recurse -Force
 }
 
-Write-Host 'HelloLock screensaver and tray registration removed.'
+Write-Host 'HelloLock application and tray registration removed.'
 if ($KeepFiles) {
     Write-Host "Installed files kept at: $installDir"
 }

@@ -36,11 +36,17 @@ jobs:
         shell: pwsh
         run: |
           $errors = @()
-          foreach ($path in @('scripts/install.ps1', 'scripts/uninstall.ps1')) {
+          $paths = Get-ChildItem scripts, tests -Recurse -Filter *.ps1
+          foreach ($path in $paths) {
+            $fileErrors = $null
             [void][System.Management.Automation.Language.Parser]::ParseFile(
-              (Resolve-Path $path), [ref]$null, [ref]$errors)
+              $path.FullName, [ref]$null, [ref]$fileErrors)
+            if ($fileErrors) { $errors += $fileErrors }
           }
           if ($errors.Count -gt 0) {
             $errors | Format-List | Out-String | Write-Error
             exit 1
           }
+      - name: Test install helpers
+        shell: pwsh
+        run: tests\install-helpers.ps1

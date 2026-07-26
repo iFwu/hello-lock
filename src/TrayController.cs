@@ -14,6 +14,7 @@ public sealed class TrayController : IDisposable
     private readonly ToolStripMenuItem _settingsItem;
     private readonly ToolStripMenuItem _exitItem;
     private readonly Icon _trayIcon;
+    private readonly IdleLockMonitor _idleMonitor;
 
     public TrayController(Action lockNow, Action openSettings, Action exit)
     {
@@ -39,6 +40,7 @@ public sealed class TrayController : IDisposable
         };
         Localization.LanguageChanged += OnLanguageChanged;
         ApplyText();
+        _idleMonitor = new IdleLockMonitor(() => TryLock(lockNow));
     }
 
     private static Icon LoadTrayIcon()
@@ -86,12 +88,11 @@ public sealed class TrayController : IDisposable
         string executable = Environment.ProcessPath
             ?? throw new InvalidOperationException("Could not determine the HelloLock executable path.");
 
-        // The tray runs from HelloLock.exe. Keep screen-saver activation in a
-        // separate process so closing the lock window never exits the tray.
+        // Keep the lock in a separate process so closing it never exits the tray.
         Process.Start(new ProcessStartInfo
         {
             FileName = executable,
-            Arguments = "/s",
+            Arguments = "/lock",
             UseShellExecute = false,
             WorkingDirectory = Path.GetDirectoryName(executable)!,
         });
@@ -99,6 +100,7 @@ public sealed class TrayController : IDisposable
 
     public void Dispose()
     {
+        _idleMonitor.Dispose();
         Localization.LanguageChanged -= OnLanguageChanged;
         _notifyIcon.Visible = false;
         _menu.Dispose();

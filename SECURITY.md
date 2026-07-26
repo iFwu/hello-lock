@@ -31,6 +31,8 @@ Administrative process termination, SYSTEM-level control, remote management,
 debugging or injection with equivalent privileges, forced sign-out, reboot, and
 application crashes are known limitations of the threat model.
 
-Pointer blocking is provided by the full-screen overlay, not a global mouse,
-touch, or pen hook. System UI that Windows places above the overlay is outside
-the guaranteed pointer-blocking boundary.
+Ordinary mouse input is blocked by a low-level mouse hook. Touch and pen input
+that Windows does not promote to mouse messages, plus system UI placed in a
+higher window band, remain outside the guaranteed pointer-blocking boundary.
+Windows credential UI remains interactive through the operating system's input
+isolation rather than an application-defined pointer pass-through region.

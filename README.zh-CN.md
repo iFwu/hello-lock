@@ -28,11 +28,11 @@ HelloLock 是 Windows 上的透明应用级锁定工具。它保持桌面内容�
 - 覆盖整个虚拟桌面的透明置顶遮罩
 - 使用 Windows Hello 验证，不读取或保存 PIN
 - 锁定期间拦截常见键盘切换快捷键
-- 通过全屏覆盖窗阻止鼠标点击；没有安装全局 mouse / touch hook
-- 支持标准 Windows 屏保参数 `/s`、`/c`、`/p`
-- 登录后常驻托盘，左键单击立即锁定
+- 锁定期间通过低级 mouse / keyboard hook 阻止普通输入
+- 托盘进程自行检测系统空闲时间，不依赖旧式 Windows 屏保 runtime
+- 登录后常驻托盘，左键立即锁定，右键打开设置
 - 托盘和锁屏分别使用 per-user 单实例约束
-- 无需管理员权限或 Windows service，可恢复原屏保配置
+- 无需管理员权限或 Windows service
 
 ## 安装
 
@@ -51,15 +51,17 @@ powershell -ExecutionPolicy Bypass -File scripts\install.ps1 `
   -AllowApplicationLevelUnlock
 ```
 
-安装脚本会部署到 `%LOCALAPPDATA%\Programs\HelloLock`，注册 30 分钟屏保，关闭
-屏保退出后额外叠加的 Windows 登录，并创建当前用户的 `HelloLock Tray` 登录任务。
-`Win+L`、睡眠和合盖后的系统锁屏不会被修改。
+安装脚本会部署到 `%LOCALAPPDATA%\Programs\HelloLock`，保存默认 30 分钟空闲锁定设置，
+创建当前用户的 `HelloLock Tray` 登录任务、Start Menu 中的锁定/设置快捷方式，以及桌面
+锁定快捷方式。`Win+L`、睡眠和合盖后的系统锁屏不会被修改。
 
-`-AllowApplicationLevelUnlock` 用于明确确认安装器会设置 `ScreenSaverIsSecure=0`，由
-HelloLock 自己负责凭据验证；若程序崩溃或被高权限进程终止，系统不会像 Winlogon
-secure desktop 那样继续保护桌面。
+从 `v0.1.0` 升级时，安装器会迁移现有空闲时间，并撤销旧版 HelloLock 的 Windows
+屏保注册，不覆盖无关的屏保设置。
 
-恢复原配置、移除托盘自启并删除安装文件：
+`-AllowApplicationLevelUnlock` 用于明确确认 HelloLock 在普通桌面自行验证凭据；若程序
+崩溃或被高权限进程终止，系统不会像 Winlogon secure desktop 那样继续保护桌面。
+
+移除托盘自启并删除安装文件：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\uninstall.ps1
@@ -70,13 +72,13 @@ powershell -ExecutionPolicy Bypass -File scripts\uninstall.ps1
 
 ## 使用
 
-- 左键单击托盘盾牌图标立即锁定。
-- 右键菜单提供“立即锁定”和“退出托盘”。
-- 直接运行 `HelloLock.exe` 或 `HelloLock.scr /s` 也会锁定。
+- 左键单击托盘 HelloLock 图标立即锁定。
+- 右键菜单提供“立即锁定”、“设置”和“退出托盘”。
+- 直接运行 `HelloLock.exe /lock` 也会锁定。
 - 按任意键或点击遮罩后，通过 Windows Hello 解锁。
 
-诊断日志位于 `%LOCALAPPDATA%\HelloLock\authentication.log`，只包含结果码和 buffer
-大小，不记录凭据内容。
+认证诊断日志位于 `%LOCALAPPDATA%\HelloLock\authentication.log`，空闲触发日志位于
+`idle-monitor.log`；二者都不记录凭据内容。
 
 ## 构建
 
@@ -93,12 +95,14 @@ dotnet publish src\HelloLock.csproj -c Release -r win-x64 `
 两种包都使用多文件发布。WPF single-file bundling 曾在一台实机上触发 native DLL
 load failure，因此没有启用单文件发布；WPF/WinForms 也不支持 trimming 或 NativeAOT。
 
+发布使用的自动化与交互式 Windows 验收见 [`tests/README.md`](tests/README.md)。
+
 ## 安全边界
 
-HelloLock 能有效阻止普通现场人员操作桌面。鼠标拦截依赖覆盖窗自身的 hit-testing，
-不是全局 mouse / touch hook；Windows 放在覆盖层之上的 system UI 或更高 window band
-仍可能收到鼠标、触摸或手写笔输入。低级键盘 hook 会继续阻止常规键盘输入，除非可信
-凭据窗口处于前台。
+HelloLock 能有效阻止普通现场人员操作桌面。低级 mouse / keyboard hook 会阻止常规
+鼠标和键盘输入，Windows credential UI 通过操作系统的输入隔离保持可交互。Windows
+放在更高 window band 的 system UI，以及触摸或手写笔产生的非鼠标 pointer input，
+仍不在完整保证范围内。
 
 在已测试的 Windows 上，即使通过 `Ctrl+Alt+Del` 打开任务管理器，普通任务管理器仍
 位于覆盖层下方，不能直接作为键鼠绕过路径；这属于实测行为，不是对所有 Windows

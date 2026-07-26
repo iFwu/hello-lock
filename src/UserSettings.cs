@@ -14,6 +14,7 @@ public enum AppLanguage
 public sealed class UserSettings
 {
     public AppLanguage Language { get; set; } = AppLanguage.System;
+    public int IdleMinutes { get; set; } = 30;
 }
 
 public static class UserSettingsStore
@@ -34,8 +35,10 @@ public static class UserSettingsStore
         try
         {
             if (!File.Exists(SettingsPath)) return new UserSettings();
-            return JsonSerializer.Deserialize<UserSettings>(File.ReadAllText(SettingsPath))
+            var settings = JsonSerializer.Deserialize<UserSettings>(File.ReadAllText(SettingsPath))
                 ?? new UserSettings();
+            settings.IdleMinutes = Math.Clamp(settings.IdleMinutes, 0, 1440);
+            return settings;
         }
         catch (JsonException)
         {
@@ -45,6 +48,7 @@ public static class UserSettingsStore
 
     public static void Save(UserSettings settings)
     {
+        settings.IdleMinutes = Math.Clamp(settings.IdleMinutes, 0, 1440);
         Directory.CreateDirectory(SettingsDirectory);
         string temporaryPath = SettingsPath + ".tmp";
         File.WriteAllText(temporaryPath, JsonSerializer.Serialize(settings, JsonOptions));

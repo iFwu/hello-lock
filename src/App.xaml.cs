@@ -17,18 +17,11 @@ public partial class App : System.Windows.Application
         RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
         base.OnStartup(e);
 
-        string mode = e.Args.Length == 0 ? "/s" : e.Args[0].ToLowerInvariant();
+        string mode = e.Args.Length == 0 ? "/lock" : e.Args[0].ToLowerInvariant();
         if (mode.StartsWith("/tray", StringComparison.Ordinal) ||
             mode.StartsWith("-tray", StringComparison.Ordinal))
         {
             StartTray();
-            return;
-        }
-
-        if (mode.StartsWith("/p", StringComparison.Ordinal) ||
-            mode.StartsWith("-p", StringComparison.Ordinal))
-        {
-            Shutdown();
             return;
         }
 

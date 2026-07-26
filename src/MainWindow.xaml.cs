@@ -10,7 +10,8 @@ namespace HelloLock;
 
 public partial class MainWindow : Window
 {
-    private readonly KeyboardHook _hook = new();
+    private readonly KeyboardHook _keyboardHook = new();
+    private readonly MouseHook _mouseHook = new();
     private readonly DispatcherTimer _credentialForegroundTimer;
     private bool _unlocking;
     private bool _unlocked;
@@ -23,8 +24,9 @@ public partial class MainWindow : Window
         Loaded += OnLoaded;
         Closing += OnClosing;
         MouseDown += (_, _) => TryUnlock();
-        _hook.KeyPressed += () => Dispatcher.BeginInvoke(TryUnlock);
-        _hook.CanPassAuthenticationInput = () => Volatile.Read(ref _credentialUiForeground);
+        _keyboardHook.KeyPressed += () => Dispatcher.BeginInvoke(TryUnlock);
+        _keyboardHook.CanPassAuthenticationInput = () => Volatile.Read(ref _credentialUiForeground);
+        _mouseHook.PointerPressed += () => Dispatcher.BeginInvoke(TryUnlock);
 
         _credentialForegroundTimer = new DispatcherTimer
         {
@@ -54,11 +56,14 @@ public partial class MainWindow : Window
             DispatcherPriority.Loaded);
         try
         {
-            _hook.Install();
+            _keyboardHook.Install();
+            _mouseHook.Install();
         }
         catch (Exception ex)
         {
             _unlocked = true;
+            _mouseHook.Dispose();
+            _keyboardHook.Dispose();
             Close();
             System.Windows.MessageBox.Show(
                 Localization.Format("Lock.HookFailed", ex.Message),
@@ -129,7 +134,8 @@ public partial class MainWindow : Window
     {
         _unlocked = true;
         _credentialForegroundTimer.Stop();
-        _hook.Dispose();
+        _mouseHook.Dispose();
+        _keyboardHook.Dispose();
         Close();
     }
 

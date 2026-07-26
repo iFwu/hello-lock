@@ -31,10 +31,10 @@ credential providers exposed for the current user.
 - Transparent, topmost overlay across the entire virtual desktop
 - Windows Hello verification without reading or storing the PIN
 - Keyboard shortcut blocking while locked
-- Pointer blocking through the full-screen overlay (not a global mouse or
-  touch hook)
-- Standard Windows screensaver modes: `/s`, `/c`, and `/p`
-- Optional tray launcher: left-click to lock immediately
+- Global low-level mouse and keyboard guards while locked
+- Idle auto-lock driven by the per-user tray process, independent of the
+  legacy Windows screensaver runtime
+- Tray launcher: left-click to lock immediately; right-click for settings
 - Per-user single-instance protection for both tray and lock processes
 - Reversible per-user installation; no administrator privileges or service
   required
@@ -70,23 +70,25 @@ The installer:
 
 - copies the self-contained application to
   `%LOCALAPPDATA%\Programs\HelloLock`;
-- registers `HelloLock.scr` as the current user's screensaver;
-- sets the idle timeout to 30 minutes by default;
-- disables the additional Windows sign-in prompt after screensaver resume,
-  because HelloLock performs its own credential verification;
+- stores a 30-minute idle lock timeout by default;
 - creates and starts the per-user `HelloLock Tray` interactive logon task;
-- backs up the previous screensaver and legacy tray startup settings.
+- creates Start Menu shortcuts for locking and settings, plus a desktop lock
+  shortcut;
+- backs up the legacy tray startup setting.
+
+When upgrading from `v0.1.0`, the installer migrates the existing idle timeout
+and removes HelloLock's legacy Windows screensaver registration without
+overwriting unrelated screensaver settings.
 
 No administrator privileges are required. `Win+L`, sleep, and lid-close lock
 behavior are not changed.
 
-`-AllowApplicationLevelUnlock` is an explicit acknowledgement that the
-installer sets `ScreenSaverIsSecure=0`. HelloLock then becomes responsible for
-credential verification; a crash or privileged process termination returns to
-the normal desktop rather than the Winlogon secure desktop.
+`-AllowApplicationLevelUnlock` is an explicit acknowledgement that HelloLock
+performs credential verification on the normal desktop. A crash or privileged
+process termination returns to the normal desktop rather than the Winlogon
+secure desktop.
 
-To restore the previous screensaver settings, remove tray startup, and delete
-the installed application files:
+To remove tray startup and delete the installed application files:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\uninstall.ps1
@@ -97,14 +99,14 @@ use `-KeepFiles` when troubleshooting an uninstall.
 
 ## Usage
 
-- Left-click the shield icon in the notification area to lock immediately.
-- Right-click it for **Lock now** and **Exit tray**.
-- Run `HelloLock.exe` or `HelloLock.scr /s` to lock directly.
+- Left-click the HelloLock icon in the notification area to lock immediately.
+- Right-click it for **Lock now**, **Settings**, and **Exit tray**.
+- Run `HelloLock.exe /lock` to lock directly.
 - Press any key or click the overlay to open Windows credential verification.
 
-The diagnostic log is written to
-`%LOCALAPPDATA%\HelloLock\authentication.log`. It contains result codes and
-buffer sizes, but never credential contents.
+Authentication diagnostics are written to
+`%LOCALAPPDATA%\HelloLock\authentication.log`; idle-trigger events are written
+to `idle-monitor.log`. Neither log contains credential contents.
 
 ## Build
 
@@ -121,6 +123,9 @@ dotnet publish src\HelloLock.csproj -c Release -r win-x64 `
 Both packages use multi-file publishing. WPF single-file bundling caused native
 DLL load failures on one tested Windows machine. Trimming and NativeAOT are not
 supported for this WPF/WinForms application.
+
+The automated and interactive Windows checks used for releases are documented
+in [`tests/README.md`](tests/README.md).
 
 ## How authentication works
 
@@ -146,11 +151,11 @@ Reference implementation:
 ## Security model
 
 HelloLock is designed to prevent ordinary local interaction with a visible
-desktop. Pointer blocking comes from the overlay's window hit-testing, not a
-global mouse/touch hook. A system or higher-band UI that Windows places above
-the overlay may receive pointer, touch, or pen input. The low-level keyboard
-hook still blocks ordinary keyboard input unless the trusted credential UI owns
-the foreground.
+desktop. Low-level mouse and keyboard hooks block ordinary local input. Windows
+credential UI remains interactive through the operating system's input
+isolation. Touch or pen input that Windows does not promote to mouse messages,
+plus system UI in a higher window band, remains outside the guaranteed
+input-blocking boundary.
 
 On tested Windows systems, the normal Task Manager remains behind the overlay
 and is not a direct keyboard/mouse bypass. This is observed behavior, not a

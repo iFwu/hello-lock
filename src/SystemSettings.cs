@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
-using Microsoft.Win32;
 
 namespace HelloLock;
 
@@ -10,7 +9,6 @@ public sealed record SystemSettingsSnapshot(int IdleMinutes, bool StartTrayAtLog
 
 public static class SystemSettings
 {
-    private const string DesktopKeyPath = @"Control Panel\Desktop";
     private const string TrayTaskDescription = "HelloLock tray launcher managed by iFwu/hello-lock";
 
     private static string InstallDirectory => Path.Combine(
@@ -32,15 +30,9 @@ public static class SystemSettings
 
     public static SystemSettingsSnapshot Load()
     {
-        using RegistryKey desktop = Registry.CurrentUser.OpenSubKey(DesktopKeyPath)
-            ?? throw new InvalidOperationException(Localization.Get("Settings.NotInstalled"));
-
-        bool active = string.Equals(desktop.GetValue("ScreenSaveActive")?.ToString(), "1", StringComparison.Ordinal);
-        int seconds = int.TryParse(desktop.GetValue("ScreenSaveTimeOut")?.ToString(), out int parsed)
-            ? parsed
-            : 0;
-        int idleMinutes = active && seconds > 0 ? Math.Max(1, seconds / 60) : 0;
-
+        if (!File.Exists(InstalledExe))
+            throw new InvalidOperationException(Localization.Get("Settings.NotInstalled"));
+        int idleMinutes = UserSettingsStore.Load().IdleMinutes;
         dynamic? task = TryGetTrayTask();
         bool startTray = task is not null && task.Enabled;
         return new SystemSettingsSnapshot(idleMinutes, startTray);
@@ -51,16 +43,13 @@ public static class SystemSettings
         if (!File.Exists(InstalledExe))
             throw new InvalidOperationException(Localization.Get("Settings.NotInstalled"));
 
-        using RegistryKey desktop = Registry.CurrentUser.CreateSubKey(DesktopKeyPath, writable: true);
-        desktop.SetValue("ScreenSaveActive", idleMinutes > 0 ? "1" : "0", RegistryValueKind.String);
-        desktop.SetValue("ScreenSaveTimeOut", checked(idleMinutes * 60).ToString(), RegistryValueKind.String);
-
         dynamic task = TryGetTrayTask()
             ?? throw new InvalidOperationException(Localization.Get("Settings.TaskMissing"));
         task.Enabled = startTrayAtLogin;
 
-        UpdateInstallState(idleMinutes);
-        BroadcastDesktopSettingsChanged();
+        var settings = UserSettingsStore.Load();
+        settings.IdleMinutes = idleMinutes;
+        UserSettingsStore.Save(settings);
     }
 
     private static dynamic? TryGetTrayTask()
@@ -84,50 +73,4 @@ public static class SystemSettings
         }
     }
 
-    private static void UpdateInstallState(int idleMinutes)
-    {
-        string statePath = Path.Combine(InstallDirectory, "install-state.json");
-        if (!File.Exists(statePath)) return;
-
-        using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(statePath));
-        var root = document.RootElement;
-        var applied = root.GetProperty("Applied");
-        var state = new
-        {
-            SchemaVersion = root.GetProperty("SchemaVersion").GetInt32(),
-            Applied = new System.Collections.Generic.Dictionary<string, string>
-            {
-                ["ScreenSaveActive"] = idleMinutes > 0 ? "1" : "0",
-                ["ScreenSaveTimeOut"] = (idleMinutes * 60).ToString(),
-                ["ScreenSaverIsSecure"] = applied.GetProperty("ScreenSaverIsSecure").GetString() ?? "0",
-                ["SCRNSAVE.EXE"] = applied.GetProperty("SCRNSAVE.EXE").GetString() ?? Path.Combine(InstallDirectory, "HelloLock.scr"),
-            },
-            TrayTaskName = root.GetProperty("TrayTaskName").GetString(),
-        };
-        string temporaryPath = statePath + ".tmp";
-        File.WriteAllText(temporaryPath, System.Text.Json.JsonSerializer.Serialize(state, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
-        File.Move(temporaryPath, statePath, overwrite: true);
-    }
-
-    private static void BroadcastDesktopSettingsChanged()
-    {
-        SendMessageTimeout(
-            new IntPtr(0xffff),
-            0x001A,
-            IntPtr.Zero,
-            "Control Panel\\Desktop",
-            0x0002,
-            5000,
-            out _);
-    }
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern IntPtr SendMessageTimeout(
-        IntPtr window,
-        uint message,
-        IntPtr wParam,
-        string lParam,
-        uint flags,
-        uint timeout,
-        out IntPtr result);
 }
