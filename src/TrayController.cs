@@ -2,6 +2,8 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Security.Principal;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace HelloLock;
@@ -40,7 +42,7 @@ public sealed class TrayController : IDisposable
         };
         Localization.LanguageChanged += OnLanguageChanged;
         ApplyText();
-        _idleMonitor = new IdleLockMonitor(() => TryLock(lockNow));
+        _idleMonitor = new IdleLockMonitor(() => TryLock(lockNow), exit);
     }
 
     private static Icon LoadTrayIcon()
@@ -93,6 +95,48 @@ public sealed class TrayController : IDisposable
         {
             FileName = executable,
             Arguments = "/lock",
+            UseShellExecute = false,
+            WorkingDirectory = Path.GetDirectoryName(executable)!,
+        });
+    }
+
+    // 守护（托盘）进程的单实例锜，也用作“守护是否在跑”的探针。
+    public static string AgentMutexName
+    {
+        get
+        {
+            string sid = WindowsIdentity.GetCurrent().User?.Value ?? Environment.UserName;
+            return $"Local\\HelloLock-Tray-{sid}";
+        }
+    }
+
+    public static bool IsAgentRunning()
+    {
+        try
+        {
+            if (Mutex.TryOpenExisting(AgentMutexName, out Mutex? mutex))
+            {
+                mutex.Dispose();
+                return true;
+            }
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return true;
+        }
+    }
+
+    // 守护未跑就拉起一个新的托盘进程（单实例锜防重复）。
+    public static void StartAgentIfNotRunning()
+    {
+        if (IsAgentRunning()) return;
+        string executable = Environment.ProcessPath
+            ?? throw new InvalidOperationException("Could not determine the HelloLock executable path.");
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = executable,
+            Arguments = "/tray",
             UseShellExecute = false,
             WorkingDirectory = Path.GetDirectoryName(executable)!,
         });

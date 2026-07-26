@@ -72,7 +72,8 @@
                 <TextBlock x:Name="StartupLabel" Grid.Row="2" VerticalAlignment="Center"
                            FontSize="14"/>
                 <CheckBox x:Name="StartupCheck" Grid.Row="2" Grid.Column="1"
-                          VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                          VerticalAlignment="Center" HorizontalAlignment="Left"
+                          Checked="OnGuardToggled" Unchecked="OnGuardToggled"/>
 
                 <TextBlock x:Name="LanguageLabel" Grid.Row="4" VerticalAlignment="Center"
                            FontSize="14"/>

@@ -5,7 +5,7 @@ using System.Security.Principal;
 
 namespace HelloLock;
 
-public sealed record SystemSettingsSnapshot(int IdleMinutes, bool StartTrayAtLogin);
+public sealed record SystemSettingsSnapshot(int IdleMinutes, bool GuardEnabled);
 
 public static class SystemSettings
 {
@@ -32,24 +32,28 @@ public static class SystemSettings
     {
         if (!File.Exists(InstalledExe))
             throw new InvalidOperationException(Localization.Get("Settings.NotInstalled"));
-        int idleMinutes = UserSettingsStore.Load().IdleMinutes;
-        dynamic? task = TryGetTrayTask();
-        bool startTray = task is not null && task.Enabled;
-        return new SystemSettingsSnapshot(idleMinutes, startTray);
+        var settings = UserSettingsStore.Load();
+        return new SystemSettingsSnapshot(settings.IdleMinutes, settings.GuardEnabled);
     }
 
-    public static void Save(int idleMinutes, bool startTrayAtLogin)
+    public static void Save(int idleMinutes, bool guardEnabled)
     {
         if (!File.Exists(InstalledExe))
             throw new InvalidOperationException(Localization.Get("Settings.NotInstalled"));
 
-        dynamic task = TryGetTrayTask()
-            ?? throw new InvalidOperationException(Localization.Get("Settings.TaskMissing"));
-        task.Enabled = startTrayAtLogin;
-
+        // 1) settings.json 是行为真相源：托盘进程读它、监视它。
         var settings = UserSettingsStore.Load();
         settings.IdleMinutes = idleMinutes;
+        settings.GuardEnabled = guardEnabled;
         UserSettingsStore.Save(settings);
+
+        // 2) 同步开机自启计划任务（best-effort：任务缺失不阻断行为设置）。
+        dynamic? task = TryGetTrayTask();
+        if (task is not null) task.Enabled = guardEnabled;
+
+        // 3) 对齐运行态：开 → 立刻拉起守护；关 → 交给托盘自我退出。
+        if (guardEnabled)
+            TrayController.StartAgentIfNotRunning();
     }
 
     private static dynamic? TryGetTrayTask()

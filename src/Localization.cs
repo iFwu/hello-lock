@@ -38,8 +38,11 @@ public static class Localization
             ["Settings.IdleTimeout"] = ("Lock after", "空闲后锁定"),
             ["Settings.Disabled"] = ("Disabled", "关闭"),
             ["Settings.Minutes"] = ("{0} minutes", "{0} 分钟"),
-            ["Settings.StartAtLogin"] = ("Start tray when I sign in", "登录后启动托盘"),
-            ["Settings.Enabled"] = ("Enabled", "已启用"),
+            ["Settings.StartAtLogin"] = ("Background guard", "后台守护"),
+            ["Settings.Enabled"] = ("Tray icon + auto-lock", "托盘常驻 + 自动锁定"),
+            ["Settings.GuardHint"] = (
+                "When off, no HelloLock process stays in the background; lock manually from the Start Menu shortcut.",
+                "关闭后后台不保留任何 HelloLock 进程，自动锁定也随之停止，只能从开始菜单快捷方式手动锁。"),
             ["Settings.Language"] = ("Language", "语言"),
             ["Settings.Language.System"] = ("Use system language", "跟随系统"),
             ["Settings.Language.English"] = ("English", "English"),

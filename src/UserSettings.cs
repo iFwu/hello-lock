@@ -15,6 +15,9 @@ public sealed class UserSettings
 {
     public AppLanguage Language { get; set; } = AppLanguage.System;
     public int IdleMinutes { get; set; } = 30;
+
+    // 后台守护总闸：托盘常驻 + 空闲自动锁定。关闭后后台零常驻进程，只能手动锁。
+    public bool GuardEnabled { get; set; } = true;
 }
 
 public static class UserSettingsStore

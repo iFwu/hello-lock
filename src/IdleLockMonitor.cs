@@ -12,19 +12,23 @@ public sealed class IdleLockMonitor : IDisposable
 {
     private const int GraceSeconds = 5;
     private readonly Action _lockNow;
+    private readonly Action _onGuardDisabled;
     private readonly Dispatcher _dispatcher;
     private readonly DispatcherTimer _timer;
     private readonly string _logPath;
     private DateTime _graceUntilUtc;
     private DateTime _settingsWriteTimeUtc;
     private int _idleMinutes;
+    private bool _guardEnabled = true;
+    private bool _guardShutdownRequested;
     private bool _sessionLocked;
     private bool _thresholdReached;
     private bool _disposed;
 
-    public IdleLockMonitor(Action lockNow)
+    public IdleLockMonitor(Action lockNow, Action onGuardDisabled)
     {
         _lockNow = lockNow;
+        _onGuardDisabled = onGuardDisabled;
         _dispatcher = Dispatcher.CurrentDispatcher;
         _logPath = Path.Combine(UserSettingsStore.SettingsDirectory, "idle-monitor.log");
         ReloadSettings(force: true);
@@ -43,6 +47,19 @@ public sealed class IdleLockMonitor : IDisposable
         if (_disposed) return;
 
         ReloadSettings(force: false);
+
+        // 守护被关闭（设置页取消勾选）：托盘守护进程自己干净退出。
+        if (!_guardEnabled)
+        {
+            if (!_guardShutdownRequested)
+            {
+                _guardShutdownRequested = true;
+                WriteLog("Guard disabled via settings; stopping tray agent.");
+                _onGuardDisabled();
+            }
+            return;
+        }
+
         if (_sessionLocked || _idleMinutes <= 0 || DateTime.UtcNow < _graceUntilUtc) return;
 
         var info = new LastInputInfo
@@ -95,7 +112,9 @@ public sealed class IdleLockMonitor : IDisposable
         if (!force && writeTime == _settingsWriteTimeUtc) return;
 
         int previous = _idleMinutes;
-        _idleMinutes = UserSettingsStore.Load().IdleMinutes;
+        var settings = UserSettingsStore.Load();
+        _idleMinutes = settings.IdleMinutes;
+        _guardEnabled = settings.GuardEnabled;
         _settingsWriteTimeUtc = writeTime;
         _thresholdReached = false;
         _graceUntilUtc = DateTime.UtcNow.AddSeconds(GraceSeconds);

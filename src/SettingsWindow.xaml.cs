@@ -38,13 +38,21 @@ public partial class SettingsWindow : Window
         _loading = true;
         try
         {
-            StartupCheck.IsChecked = _systemSettings.StartTrayAtLogin;
+            StartupCheck.IsChecked = _systemSettings.GuardEnabled;
+            IdleCombo.IsEnabled = _systemSettings.GuardEnabled;
             ReloadLocalizedOptions();
         }
         finally
         {
             _loading = false;
         }
+    }
+
+    private void OnGuardToggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        // 关闭后台守护时，自动锁定无从运行，置灰空闲选项。
+        IdleCombo.IsEnabled = StartupCheck.IsChecked == true;
     }
 
     private void ReloadLocalizedOptions()
@@ -84,6 +92,7 @@ public partial class SettingsWindow : Window
         StartupLabel.Text = Localization.Get("Settings.StartAtLogin");
         LanguageLabel.Text = Localization.Get("Settings.Language");
         StartupCheck.Content = Localization.Get("Settings.Enabled");
+        StartupCheck.ToolTip = Localization.Get("Settings.GuardHint");
         SaveButton.Content = Localization.Get("Settings.Save");
         CancelButton.Content = Localization.Get("Settings.Cancel");
         VersionText.Text = Localization.Format("Settings.Version", DisplayVersion);
@@ -123,14 +132,14 @@ public partial class SettingsWindow : Window
         try
         {
             int idleMinutes = IdleCombo.SelectedValue is int selected ? selected : 30;
-            bool startTray = StartupCheck.IsChecked == true;
+            bool guardEnabled = StartupCheck.IsChecked == true;
             AppLanguage language = LanguageCombo.SelectedValue is AppLanguage selectedLanguage
                 ? selectedLanguage
                 : AppLanguage.System;
 
-            SystemSettings.Save(idleMinutes, startTray);
+            SystemSettings.Save(idleMinutes, guardEnabled);
             Localization.SetLanguage(language);
-            _systemSettings = new SystemSettingsSnapshot(idleMinutes, startTray);
+            _systemSettings = new SystemSettingsSnapshot(idleMinutes, guardEnabled);
             _saved = true;
             StatusText.Foreground = new System.Windows.Media.SolidColorBrush(
                 System.Windows.Media.Color.FromRgb(31, 111, 235));

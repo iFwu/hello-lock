@@ -30,6 +30,16 @@ public partial class App : System.Windows.Application
         {
             ShutdownMode = System.Windows.ShutdownMode.OnMainWindowClose;
             ShowSettings();
+            // 设置页即“控制中心”：守护开着但没在跑，顺手拉起（退出后重新启用的入口）。
+            try
+            {
+                if (UserSettingsStore.Load().GuardEnabled)
+                    TrayController.StartAgentIfNotRunning();
+            }
+            catch
+            {
+                // 拉起守护失败不影响设置页使用。
+            }
             return;
         }
 
@@ -51,12 +61,18 @@ public partial class App : System.Windows.Application
 
     private void StartTray()
     {
-        string userSid = WindowsIdentity.GetCurrent().User?.Value ?? Environment.UserName;
         _singleInstance = new Mutex(
             initiallyOwned: true,
-            name: $"Local\\HelloLock-Tray-{userSid}",
+            name: TrayController.AgentMutexName,
             createdNew: out bool createdNew);
         if (!createdNew)
+        {
+            Shutdown();
+            return;
+        }
+
+        // 守护被关：即使开机自启任务触发，也立即退出，不驻留、不显示托盘。
+        if (!UserSettingsStore.Load().GuardEnabled)
         {
             Shutdown();
             return;
