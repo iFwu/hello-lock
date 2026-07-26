@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore
+        run: dotnet restore src\HelloLock.csproj
+      - name: Build
+        run: dotnet build src\HelloLock.csproj -c Release --no-restore -warnaserror
+      - name: Publish framework-dependent
+        run: >-
+          dotnet publish src\HelloLock.csproj -c Release -r win-x64
+          --self-contained false -warnaserror
+          -p:PublishSingleFile=false -p:PublishTrimmed=false
+          -p:PublishReadyToRun=false -o artifacts\framework-dependent
+      - name: Publish self-contained
+        run: >-
+          dotnet publish src\HelloLock.csproj -c Release -r win-x64
+          --self-contained true -warnaserror
+          -p:PublishSingleFile=false -p:PublishTrimmed=false
+          -p:PublishReadyToRun=false -o artifacts\self-contained
+      - name: Parse PowerShell scripts
+        shell: pwsh
+        run: |
+          $errors = @()
+          foreach ($path in @('scripts/install.ps1', 'scripts/uninstall.ps1')) {
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $path), [ref]$null, [ref]$errors)
+          }
+          if ($errors.Count -gt 0) {
+            $errors | Format-List | Out-String | Write-Error
+            exit 1
+          }
