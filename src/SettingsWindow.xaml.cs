@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -9,6 +10,13 @@ namespace HelloLock;
 public partial class SettingsWindow : Window
 {
     private static readonly int[] IdleOptions = [0, 5, 10, 15, 30, 60];
+    private static readonly string InformationalVersion =
+        typeof(SettingsWindow).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+            .InformationalVersion
+        ?? typeof(SettingsWindow).Assembly.GetName().Version?.ToString()
+        ?? "unknown";
+    private static readonly string DisplayVersion = GetDisplayVersion();
 
     private SystemSettingsSnapshot _systemSettings;
     private readonly AppLanguage _originalLanguage;
@@ -78,6 +86,19 @@ public partial class SettingsWindow : Window
         StartupCheck.Content = Localization.Get("Settings.Enabled");
         SaveButton.Content = Localization.Get("Settings.Save");
         CancelButton.Content = Localization.Get("Settings.Cancel");
+        VersionText.Text = Localization.Format("Settings.Version", DisplayVersion);
+        VersionText.ToolTip = InformationalVersion;
+    }
+
+    private static string GetDisplayVersion()
+    {
+        int separator = InformationalVersion.IndexOf('+');
+        if (separator < 0) return InformationalVersion;
+
+        string version = InformationalVersion[..separator];
+        string revision = InformationalVersion[(separator + 1)..];
+        if (revision.Length > 7) revision = revision[..7];
+        return $"{version} ({revision})";
     }
 
     private void OnLanguageSelectionChanged(object sender, SelectionChangedEventArgs e)

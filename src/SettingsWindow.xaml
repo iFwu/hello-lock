@@ -87,8 +87,12 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBlock x:Name="StatusText" VerticalAlignment="Center"
-                       Foreground="#FF5B6470" FontSize="13"/>
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock x:Name="StatusText"
+                           Foreground="#FF5B6470" FontSize="13"/>
+                <TextBlock x:Name="VersionText" Margin="0,3,0,0"
+                           Foreground="#FF7A828D" FontSize="11"/>
+            </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal">
                 <Button x:Name="CancelButton" Click="OnCancel" Margin="0,0,10,0"/>
                 <Button x:Name="SaveButton" Click="OnSave" IsDefault="True"

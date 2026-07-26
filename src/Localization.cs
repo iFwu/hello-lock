@@ -46,6 +46,7 @@ public static class Localization
             ["Settings.Language.Chinese"] = ("简体中文", "简体中文"),
             ["Settings.Save"] = ("Save", "保存"),
             ["Settings.Cancel"] = ("Cancel", "取消"),
+            ["Settings.Version"] = ("Version {0}", "版本 {0}"),
             ["Settings.Saved"] = ("Settings saved.", "设置已保存。"),
             ["Settings.SaveFailed"] = ("Unable to save settings:\n{0}", "无法保存设置：\n{0}"),
             ["Settings.NotInstalled"] = ("HelloLock is not installed. Run the installer first.", "HelloLock 尚未安装，请先运行安装脚本。"),

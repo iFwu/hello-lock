@@ -26,9 +26,12 @@ public static class CredUiAuthenticator
         return Task.Run(() => TryVerifyCurrentUser(ownerWindow));
     }
 
-    public static bool IsCredentialUiForeground()
+    public static bool IsCredentialUiForeground() =>
+        TryGetCredentialUiForegroundWindow(out _);
+
+    public static bool TryGetCredentialUiForegroundWindow(out IntPtr foreground)
     {
-        IntPtr foreground = GetForegroundWindow();
+        foreground = GetForegroundWindow();
         if (foreground == IntPtr.Zero) return false;
 
         GetWindowThreadProcessId(foreground, out uint processId);
