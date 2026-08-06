@@ -18,8 +18,14 @@ jobs:
           dotnet-version: 8.0.x
       - name: Restore
         run: dotnet restore src\HelloLock.csproj
+      - name: Restore checks
+        run: dotnet restore tests\HelloLock.Checks\HelloLock.Checks.csproj
       - name: Build
         run: dotnet build src\HelloLock.csproj -c Release --no-restore -warnaserror
+      - name: Test idle lock policy
+        run: >-
+          dotnet run --project tests\HelloLock.Checks\HelloLock.Checks.csproj
+          -c Release --no-restore
       - name: Publish framework-dependent
         run: >-
           dotnet publish src\HelloLock.csproj -c Release -r win-x64

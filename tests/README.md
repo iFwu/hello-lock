@@ -5,6 +5,8 @@
 GitHub Actions runs the following checks on `windows-latest`:
 
 - restore, build, and both publish modes with warnings treated as errors;
+- idle policy checks for startup session state, stale pre-login input, session
+  lock/disconnect state, and tick-count wraparound;
 - PowerShell parser validation for every script under `scripts/` and `tests/`;
 - `tests/install-helpers.ps1`, which executes installer helper functions against
   temporary settings and registry fixtures.
@@ -40,6 +42,10 @@ powershell -ExecutionPolicy Bypass -File tests\windows\input-transition-hitl.ps1
   -HelloLockPath "$env:LOCALAPPDATA\Programs\HelloLock\HelloLock.exe" `
   -Cycles 12
 ```
+
+Use `-OpenTrigger Mouse -Cycles 1` to verify that clicking outside the lock card
+opens CredentialUIBroker as the foreground window without a second click in the
+credential field.
 
 Each time Windows credential verification appears, physically press `Esc`
 until it closes. The script injects mouse input only after it confirms that

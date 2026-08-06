@@ -39,6 +39,14 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        try
+        {
+            DesktopSnapshotImage.Source = DesktopSnapshot.CaptureVirtualDesktop();
+        }
+        catch
+        {
+            DesktopSnapshotImage.Visibility = Visibility.Collapsed;
+        }
 
         Loaded += OnLoaded;
         Closing += OnClosing;
@@ -52,29 +60,7 @@ public partial class MainWindow : Window
         {
             Interval = TimeSpan.FromMilliseconds(100),
         };
-        _credentialForegroundTimer.Tick += (_, _) =>
-        {
-            IntPtr credentialUiWindow = IntPtr.Zero;
-            bool credentialUiForeground =
-                _unlocking && CredUiAuthenticator.TryGetCredentialUiForegroundWindow(
-                    out credentialUiWindow);
-            bool wasForeground = Volatile.Read(ref _credentialUiForeground);
-            if (credentialUiForeground && !wasForeground)
-            {
-                Volatile.Write(ref _credentialUiForeground, true);
-                StartZOrderEventGuard(credentialUiWindow);
-                ReassertOverlayTopmost();
-            }
-            else if (credentialUiForeground)
-            {
-                _credentialUiWindow = credentialUiWindow;
-            }
-            else if (!credentialUiForeground && wasForeground)
-            {
-                Volatile.Write(ref _credentialUiForeground, false);
-                StopZOrderEventGuard();
-            }
-        };
+        _credentialForegroundTimer.Tick += (_, _) => RefreshCredentialUiForeground();
         ApplyText();
     }
 
@@ -128,6 +114,9 @@ public partial class MainWindow : Window
         if (_unlocking || _unlocked) return;
         _unlocking = true;
         _credentialUiForeground = false;
+        StartCredentialEventGuard();
+        Activate();
+        SetForegroundWindow(_overlayHandle);
         _credentialForegroundTimer.Start();
         StatusText.Text = "";
 
@@ -164,7 +153,7 @@ public partial class MainWindow : Window
         {
             _credentialForegroundTimer.Stop();
             Volatile.Write(ref _credentialUiForeground, false);
-            StopZOrderEventGuard();
+            StopCredentialEventGuard();
             _unlocking = false;
         }
     }
@@ -173,7 +162,7 @@ public partial class MainWindow : Window
     {
         _unlocked = true;
         _credentialForegroundTimer.Stop();
-        StopZOrderEventGuard();
+        StopCredentialEventGuard();
         _mouseHook.Dispose();
         _keyboardHook.Dispose();
         Close();
@@ -181,15 +170,13 @@ public partial class MainWindow : Window
 
     private void Relock()
     {
-        StopZOrderEventGuard();
         Topmost = true;
         Activate();
     }
 
-    private void StartZOrderEventGuard(IntPtr credentialUiWindow)
+    private void StartCredentialEventGuard()
     {
-        StopZOrderEventGuard();
-        _credentialUiWindow = credentialUiWindow;
+        StopCredentialEventGuard();
         uint flags = WineventOutOfContext | WineventSkipOwnProcess;
         _foregroundEventHook = SetWinEventHook(
             EventSystemForeground,
@@ -209,7 +196,7 @@ public partial class MainWindow : Window
             flags);
     }
 
-    private void StopZOrderEventGuard()
+    private void StopCredentialEventGuard()
     {
         if (_foregroundEventHook != IntPtr.Zero)
         {
@@ -225,6 +212,50 @@ public partial class MainWindow : Window
         Interlocked.Exchange(ref _zOrderReassertPending, 0);
     }
 
+    private void RefreshCredentialUiForeground()
+    {
+        IntPtr credentialUiWindow = IntPtr.Zero;
+        bool credentialUiForeground =
+            _unlocking && CredUiAuthenticator.TryGetCredentialUiForegroundWindow(
+                out credentialUiWindow);
+        UpdateCredentialUiForeground(credentialUiForeground, credentialUiWindow);
+    }
+
+    private void UpdateCredentialUiForeground(bool foreground, IntPtr window)
+    {
+        bool wasForeground = Volatile.Read(ref _credentialUiForeground);
+        if (foreground)
+        {
+            _credentialUiWindow = window;
+            Volatile.Write(ref _credentialUiForeground, true);
+            if (!wasForeground) ReassertOverlayTopmost();
+        }
+        else if (wasForeground)
+        {
+            Volatile.Write(ref _credentialUiForeground, false);
+            _credentialUiWindow = IntPtr.Zero;
+        }
+    }
+
+    private void FocusCredentialUiWindow(IntPtr window, uint processId)
+    {
+        if (!_unlocking) return;
+        _credentialUiWindow = window;
+        bool alreadyForeground = GetForegroundWindow() == window;
+        bool foregroundAllowed = true;
+        bool foregroundSet = true;
+        if (!alreadyForeground)
+        {
+            foregroundAllowed = AllowSetForegroundWindow(processId);
+            foregroundSet = SetForegroundWindow(window);
+        }
+        bool foreground = GetForegroundWindow() == window;
+        CredUiAuthenticator.LogDiagnostic(
+            $"CredentialUI focus: alreadyForeground={alreadyForeground}, " +
+            $"allow={foregroundAllowed}, set={foregroundSet}, foreground={foreground}");
+        RefreshCredentialUiForeground();
+    }
+
     private void OnWinEvent(
         IntPtr hook,
         uint eventType,
@@ -234,13 +265,34 @@ public partial class MainWindow : Window
         uint eventThread,
         uint eventTime)
     {
-        if (window == IntPtr.Zero || window == _overlayHandle || window == _credentialUiWindow)
+        if (window == IntPtr.Zero || window == _overlayHandle || !_unlocking)
             return;
-        if (!Volatile.Read(ref _credentialUiForeground)) return;
-        bool relevant = eventType == EventSystemForeground ||
-            ((eventType == EventObjectShow || eventType == EventObjectReorder) &&
-                objectId == ObjIdWindow && childId == ChildIdSelf);
-        if (!relevant) return;
+
+        bool topLevelObject = objectId == ObjIdWindow && childId == ChildIdSelf;
+        if (eventType == EventSystemForeground)
+        {
+            bool credentialUiForeground =
+                CredUiAuthenticator.IsCredentialUiWindow(window, out _);
+            Dispatcher.BeginInvoke(
+                () => UpdateCredentialUiForeground(credentialUiForeground, window),
+                DispatcherPriority.Send);
+            return;
+        }
+
+        if (eventType == EventObjectShow && topLevelObject &&
+            CredUiAuthenticator.IsCredentialUiWindow(window, out uint processId))
+        {
+            Dispatcher.BeginInvoke(
+                () => FocusCredentialUiWindow(window, processId),
+                DispatcherPriority.Send);
+            return;
+        }
+
+        if (window == _credentialUiWindow ||
+            !Volatile.Read(ref _credentialUiForeground) ||
+            !topLevelObject ||
+            eventType is not (EventObjectShow or EventObjectReorder))
+            return;
         if (Interlocked.Exchange(ref _zOrderReassertPending, 1) != 0) return;
 
         Dispatcher.BeginInvoke(() =>
@@ -308,6 +360,17 @@ public partial class MainWindow : Window
         int width,
         int height,
         uint flags);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr window);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool AllowSetForegroundWindow(uint processId);
 
     private delegate void WinEventDelegate(
         IntPtr hook,

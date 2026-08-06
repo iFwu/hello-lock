@@ -5,12 +5,27 @@
         Icon="Assets/HelloLock.ico"
         WindowStyle="None"
         AllowsTransparency="True"
-        Background="#24000000"
+        Background="#FF111318"
         Topmost="True"
         ShowInTaskbar="False"
         ResizeMode="NoResize"
         WindowStartupLocation="Manual">
-    <Grid>
+    <Grid ClipToBounds="True">
+        <Image x:Name="DesktopSnapshotImage"
+               Margin="-28"
+               Stretch="Fill"
+               IsHitTestVisible="False"
+               RenderOptions.BitmapScalingMode="HighQuality">
+            <Image.CacheMode>
+                <BitmapCache/>
+            </Image.CacheMode>
+            <Image.Effect>
+                <BlurEffect Radius="22" KernelType="Gaussian" RenderingBias="Performance"/>
+            </Image.Effect>
+        </Image>
+
+        <Border Background="#52000000" IsHitTestVisible="False"/>
+
         <Border x:Name="LockCard"
                 HorizontalAlignment="Left" VerticalAlignment="Top"
                 Width="420" MinHeight="248"

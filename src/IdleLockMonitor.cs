@@ -19,6 +19,9 @@ public sealed class IdleLockMonitor : IDisposable
     private DateTime _graceUntilUtc;
     private DateTime _settingsWriteTimeUtc;
     private int _idleMinutes;
+    private uint _baselineTick;
+    private bool _sessionStateKnown;
+    private bool _sessionStateUnavailableLogged;
     private bool _guardEnabled = true;
     private bool _guardShutdownRequested;
     private bool _sessionLocked;
@@ -31,9 +34,11 @@ public sealed class IdleLockMonitor : IDisposable
         _onGuardDisabled = onGuardDisabled;
         _dispatcher = Dispatcher.CurrentDispatcher;
         _logPath = Path.Combine(UserSettingsStore.SettingsDirectory, "idle-monitor.log");
+        _baselineTick = unchecked((uint)Environment.TickCount);
         ReloadSettings(force: true);
         _graceUntilUtc = DateTime.UtcNow.AddSeconds(GraceSeconds);
         SystemEvents.SessionSwitch += OnSessionSwitch;
+        RefreshSessionState();
         _timer = new DispatcherTimer(
             TimeSpan.FromSeconds(1),
             DispatcherPriority.Background,
@@ -60,7 +65,12 @@ public sealed class IdleLockMonitor : IDisposable
             return;
         }
 
-        if (_sessionLocked || _idleMinutes <= 0 || DateTime.UtcNow < _graceUntilUtc) return;
+        RefreshSessionState();
+        if (!_sessionStateKnown ||
+            _sessionLocked ||
+            _idleMinutes <= 0 ||
+            DateTime.UtcNow < _graceUntilUtc)
+            return;
 
         var info = new LastInputInfo
         {
@@ -73,9 +83,17 @@ public sealed class IdleLockMonitor : IDisposable
         }
 
         uint now = unchecked((uint)Environment.TickCount);
-        uint idleMilliseconds = unchecked(now - info.Time);
-        uint thresholdMilliseconds = checked((uint)(_idleMinutes * 60_000));
-        if (idleMilliseconds < thresholdMilliseconds)
+        uint idleMilliseconds = IdleLockPolicy.GetEffectiveIdleMilliseconds(
+            now,
+            info.Time,
+            _baselineTick);
+        if (!IdleLockPolicy.ShouldStartLock(
+                _sessionStateKnown,
+                _sessionLocked,
+                _idleMinutes,
+                now,
+                info.Time,
+                _baselineTick))
         {
             _thresholdReached = false;
             return;
@@ -127,18 +145,61 @@ public sealed class IdleLockMonitor : IDisposable
         _dispatcher.BeginInvoke(() =>
         {
             if (_disposed) return;
-            if (e.Reason == SessionSwitchReason.SessionLock)
+            if (e.Reason is SessionSwitchReason.SessionLock or
+                SessionSwitchReason.SessionLogoff or
+                SessionSwitchReason.ConsoleDisconnect or
+                SessionSwitchReason.RemoteDisconnect)
             {
-                _sessionLocked = true;
-                _thresholdReached = true;
+                ApplySessionState(locked: true);
             }
-            else if (e.Reason == SessionSwitchReason.SessionUnlock)
+            else if (e.Reason is SessionSwitchReason.SessionUnlock or
+                     SessionSwitchReason.SessionLogon or
+                     SessionSwitchReason.ConsoleConnect or
+                     SessionSwitchReason.RemoteConnect)
             {
-                _sessionLocked = false;
-                _thresholdReached = false;
-                _graceUntilUtc = DateTime.UtcNow.AddSeconds(GraceSeconds);
+                ApplySessionState(locked: false);
             }
         });
+    }
+
+    private void RefreshSessionState()
+    {
+        if (!WindowsSessionState.TryGetCurrentSessionLocked(out bool locked))
+        {
+            if (!_sessionStateUnavailableLogged)
+            {
+                _sessionStateUnavailableLogged = true;
+                WriteLog("Windows session state unavailable; idle locking paused.");
+            }
+            return;
+        }
+
+        if (_sessionStateUnavailableLogged)
+        {
+            _sessionStateUnavailableLogged = false;
+            WriteLog("Windows session state available; idle locking resumed.");
+        }
+        ApplySessionState(locked);
+    }
+
+    private void ApplySessionState(bool locked)
+    {
+        bool stateChanged = !_sessionStateKnown || _sessionLocked != locked;
+        bool resetBaseline = !_sessionStateKnown || (_sessionLocked && !locked);
+        _sessionStateKnown = true;
+        _sessionLocked = locked;
+        if (stateChanged)
+            WriteLog($"Windows session state: {(locked ? "locked" : "unlocked")}");
+        if (locked)
+        {
+            _thresholdReached = true;
+            return;
+        }
+
+        if (!resetBaseline) return;
+        _baselineTick = unchecked((uint)Environment.TickCount);
+        _thresholdReached = false;
+        _graceUntilUtc = DateTime.UtcNow.AddSeconds(GraceSeconds);
     }
 
     private void WriteLog(string message)

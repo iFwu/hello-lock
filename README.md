@@ -12,10 +12,10 @@
   <a href="README.zh-CN.md">简体中文</a>
 </p>
 
-HelloLock is a transparent, application-level lock for Windows. It keeps the
-desktop visible, blocks ordinary keyboard input and pointer interaction with
-the covered desktop, and verifies the current user through the Windows
-credential UI before unlocking.
+HelloLock is an application-level lock for Windows. It keeps the desktop
+recognizable through an in-memory blurred snapshot, blocks ordinary keyboard
+input and pointer interaction with the covered desktop, and verifies the
+current user through the Windows credential UI before unlocking.
 
 It supports Windows Hello PIN, fingerprint, face recognition, and other
 credential providers exposed for the current user.
@@ -28,12 +28,14 @@ credential providers exposed for the current user.
 
 ## Features
 
-- Transparent, topmost overlay across the entire virtual desktop
+- Gaussian-blurred in-memory snapshot across the entire virtual desktop
 - Windows Hello verification without reading or storing the PIN
 - Keyboard shortcut blocking while locked
 - Global low-level mouse and keyboard guards while locked
 - Idle auto-lock driven by the per-user tray process, independent of the
   legacy Windows screensaver runtime
+- Windows session-state awareness prevents an application lock from being
+  added behind the real Windows lock screen
 - Tray launcher: left-click to lock immediately; right-click for settings
 - Per-user single-instance protection for both tray and lock processes
 - Reversible per-user installation; no administrator privileges or service

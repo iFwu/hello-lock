@@ -29,12 +29,20 @@ public static class CredUiAuthenticator
     public static bool IsCredentialUiForeground() =>
         TryGetCredentialUiForegroundWindow(out _);
 
+    internal static void LogDiagnostic(string message) => AppendLog(message);
+
     public static bool TryGetCredentialUiForegroundWindow(out IntPtr foreground)
     {
         foreground = GetForegroundWindow();
-        if (foreground == IntPtr.Zero) return false;
+        return IsCredentialUiWindow(foreground, out _);
+    }
 
-        GetWindowThreadProcessId(foreground, out uint processId);
+    internal static bool IsCredentialUiWindow(IntPtr window, out uint processId)
+    {
+        processId = 0;
+        if (window == IntPtr.Zero) return false;
+
+        GetWindowThreadProcessId(window, out processId);
         if (processId == 0) return false;
 
         IntPtr process = OpenProcess(ProcessQueryLimitedInformation, false, processId);

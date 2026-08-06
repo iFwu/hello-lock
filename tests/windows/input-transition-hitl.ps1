@@ -5,6 +5,9 @@ param(
     [ValidateRange(1, 100)]
     [int]$Cycles = 12,
 
+    [ValidateSet('Keyboard', 'Mouse')]
+    [string]$OpenTrigger = 'Keyboard',
+
     [string]$OutputPath = (Join-Path $env:TEMP 'hello-lock-input-transition-result.json')
 )
 
@@ -142,6 +145,17 @@ function Send-Key([byte]$key) {
     [TransitionRaceInput]::keybd_event($key, 0, 0x0002, [UIntPtr]::Zero)
 }
 
+function Open-CredentialUi {
+    if ($OpenTrigger -eq 'Mouse') {
+        $screen = [Windows.Forms.Screen]::PrimaryScreen.Bounds
+        [void][TransitionRaceInput]::SetCursorPos($screen.Left + 24, $screen.Top + 24)
+        [TransitionRaceInput]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
+        [TransitionRaceInput]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
+        return
+    }
+    Send-Key 0x20
+}
+
 function Has-Leak {
     return $script:leftDownEvents -gt 0 -or
         $script:rightDownEvents -gt 0 -or
@@ -169,7 +183,7 @@ $timer.Add_Tick({
             }
             'wait-lock' {
                 if ($elapsed -lt 800) { break }
-                Send-Key 0x20
+                Open-CredentialUi
                 $script:phase = 'wait-credential'
                 $script:phaseStarted = [DateTime]::UtcNow
                 break
@@ -240,7 +254,7 @@ $timer.Add_Tick({
             'wait-relock' {
                 if ($elapsed -lt 1200) { break }
                 $label.Text = 'Opening Windows Hello'
-                Send-Key 0x20
+                Open-CredentialUi
                 $script:phase = 'wait-credential'
                 $script:phaseStarted = [DateTime]::UtcNow
                 break
@@ -278,6 +292,7 @@ $result = [ordered]@{
     Failure = $script:failure
     CyclesTarget = $script:cyclesTarget
     CyclesCompleted = $script:cyclesCompleted
+    OpenTrigger = $OpenTrigger
     CredentialTransitions = $script:credentialsObserved
     LeftDownEvents = $script:leftDownEvents
     RightDownEvents = $script:rightDownEvents

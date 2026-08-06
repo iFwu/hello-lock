@@ -12,8 +12,9 @@
   <a href="README.md">English</a>
 </p>
 
-HelloLock 是 Windows 上的透明应用级锁定工具。它保持桌面内容可见，拦截常规键盘
-输入及对覆盖桌面的指针操作，并通过 Windows 凭据界面验证当前用户后解锁。
+HelloLock 是 Windows 上的应用级锁定工具。它使用仅保留在内存中的桌面快照显示
+Gaussian blur 背景，拦截常规键盘输入及对覆盖桌面的指针操作，并通过 Windows
+凭据界面验证当前用户后解锁。
 
 支持 Windows Hello PIN、指纹、人脸及系统为当前用户提供的其他 Credential Provider。
 
@@ -25,11 +26,12 @@ HelloLock 是 Windows 上的透明应用级锁定工具。它保持桌面内容�
 
 ## 功能
 
-- 覆盖整个虚拟桌面的透明置顶遮罩
+- 覆盖整个虚拟桌面的内存快照 Gaussian blur 背景
 - 使用 Windows Hello 验证，不读取或保存 PIN
 - 锁定期间拦截常见键盘切换快捷键
 - 锁定期间通过低级 mouse / keyboard hook 阻止普通输入
 - 托盘进程自行检测系统空闲时间，不依赖旧式 Windows 屏保 runtime
+- 感知 Windows session 锁定状态，避免在系统锁屏后面再次叠加应用锁
 - 登录后常驻托盘，左键立即锁定，右键打开设置
 - 托盘和锁屏分别使用 per-user 单实例约束
 - 无需管理员权限或 Windows service
